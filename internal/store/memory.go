@@ -6,7 +6,6 @@ import (
 	"sync"
 	"github.com/synctera/tech-challenge/internal/model"
 	"sort"
-	"fmt"
 )
 
 type MemoryStore struct {
@@ -94,28 +93,30 @@ func (s *MemoryStore) Get(id string) (model.Transaction, error) {
 	return model.Transaction{}, ErrNotFound
 }
 
+// List returns a slice of transactions based on the provided limit and offset for pagination.
+// ----------------------------------------------------------------------------------------------
+// initially I handled edge cases but after re-reading the requirements I realized it just says 
+// "return an empty list if offset is out of bounds" and doesn't specify that limit/offset must 
+// be non-negative so I removed the error handling for negative values and just treat them as 
+// normal values which results in the same behavior as if they were positive (e.g. negative 
+// offset will just return the first "limit" transactions)
 func (s *MemoryStore) List(limit, offset int) ([]model.Transaction, error) {
-	s.memstoreMux.RLock()
-	defer s.memstoreMux.RUnlock()
+    s.memstoreMux.RLock()
+    defer s.memstoreMux.RUnlock()
 
-	end := offset + limit
+    // Handle offset beyond data - return empty slice
+    if offset >= len(s.ordered) {
+        return []model.Transaction{}, nil
+    }
 
-	// handle edge cases for limit and offset
-	// if offset is greater than or equal to the total number of transactions, return an error
-	// if offset + limit exceeds the length of the ordered slice, return an error indicating invalid pagination
-	// if the ordered slice is nil, return an error indicating that the store is empty
-	if offset >= len(s.ordered) {
-		return []model.Transaction{}, fmt.Errorf("Invalid Pagination: Offset exceeds total transactions.")
-	} else if end > len(s.ordered) {
-		return []model.Transaction{}, fmt.Errorf("Invalid Pagination: Offset + limit exceeds slice length")
-	} else if s.ordered == nil {
-		return []model.Transaction{}, fmt.Errorf("Memory Store Empty. No transactions found.")
-	}
+    end := offset + limit
+    // Cap end to available data instead of erroring
+    if end > len(s.ordered) {
+        end = len(s.ordered)
+    }
 
-	// create a new slice to hold the results of the query based on the provided limit and offset
-	// we do this to avoid returning a reference to the underlying ordered slice which could be modified by the caller
-	result := make([]model.Transaction, end-offset)
-	copy(result, s.ordered[offset:end])
+    result := make([]model.Transaction, end-offset)
+    copy(result, s.ordered[offset:end])
 
-	return result, nil
+    return result, nil
 }

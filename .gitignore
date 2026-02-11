@@ -28,6 +28,3 @@ vendor/
 *.swo
 *~
 .DS_Store
-
-# Development plan (not part of submission)
-PLAN.md
