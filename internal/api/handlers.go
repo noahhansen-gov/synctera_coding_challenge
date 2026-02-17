@@ -23,22 +23,22 @@ func NewHandler(s store.Store) *Handler {
 
 func (h *Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
     var txn model.Transaction
-    
+
     // Parse JSON
     if err := json.NewDecoder(r.Body).Decode(&txn); err != nil {
         http.Error(w, "invalid JSON", http.StatusBadRequest)
         return
     }
-    
+
     // Validate required fields
-    if err := validateTransaction(txn); err != nil {
+    if err := ValidateTransaction(txn); err != nil {
         http.Error(w, err.Error(), http.StatusBadRequest)
         return
     }
-    
+
     // Call the store and create the transaction
     err := h.store.Create(txn)
-    
+
     // Handle errors from store
     if errors.Is(err, store.ErrDuplicate) {
         // Idempotent retry - same transaction already exists
@@ -54,7 +54,7 @@ func (h *Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
         http.Error(w, "internal server error", http.StatusInternalServerError)
         return
     }
-    
+
     // 5. Success - new transaction created
     w.WriteHeader(http.StatusCreated)
     json.NewEncoder(w).Encode(txn)
@@ -65,25 +65,25 @@ func (h *Handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
     query := r.URL.Query()
 
     // Parse query parameters (no pre-declaration needed)
-    limit, offset, currency, 
-		   startDateStr, endDateStr, 
-		   minAmountStr, maxAmountStr := parseQueryParams(query)
+    limit, offset, currency,
+	   startDateStr, endDateStr,
+	   minAmountStr, maxAmountStr := parseQueryParams(query)
 
 	// Validate pagination parameters
-	if err := validatePagination(limit, offset); err != nil {
+	if err := ValidatePagination(limit, offset); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Parse and validate date filters
-	startDate, endDate, err := parseAndValidateDateFilters(startDateStr, endDateStr)
+	startDate, endDate, err := ParseAndValidateDateFilters(startDateStr, endDateStr)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Parse and validate amount filters
-	minAmount, maxAmount, err := parseAndValidateAmountFilters(minAmountStr, maxAmountStr)
+	minAmount, maxAmount, err := ParseAndValidateAmountFilters(minAmountStr, maxAmountStr)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -99,11 +99,11 @@ func (h *Handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Apply filters to the retrieved transactions
-	filtered := applyFilters(allTransactions, currency, startDate, endDate, minAmount, maxAmount)
-    
+	filtered := ApplyFilters(allTransactions, currency, startDate, endDate, minAmount, maxAmount)
+
 	// Apply pagination to the filtered results
-	results := applyPagination(filtered, limit, offset)
-    
+	results := ApplyPagination(filtered, limit, offset)
+
 	// Set response header
 	w.Header().Set("Content-Type", "application/json")
 
@@ -111,11 +111,12 @@ func (h *Handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(results)
 }
 
-// PRIVATE FUNCTIONS
+// EXPORTED HELPER FUNCTIONS
+// These are exported (uppercase) so they can be tested from the external tests/api/ package.
+// This is safe because internal/ packages cannot be imported from outside this module.
 
-// validate the transaction fields before attempting to store it
-// this is a helper function to keep the main handler logic cleaner and more readable
-func validateTransaction(txn model.Transaction) error {
+// ValidateTransaction validates the transaction fields before attempting to store it.
+func ValidateTransaction(txn model.Transaction) error {
 	switch {
 	case txn.ID == "":
 		return errors.New("id is required")
@@ -125,24 +126,12 @@ func validateTransaction(txn model.Transaction) error {
 		return errors.New("amount must be positive")
 	case txn.EffectiveAt.IsZero():
 		return errors.New("effective_at is required")
-	}	
+	}
 	return nil
 }
 
-// parse and validate the query parameters for the ListTransactions endpoint
-func parseQueryParams(query url.Values) (limit, offset int, currency, startDateStr, endDateStr, minAmountStr, maxAmountStr string) {
-    limit = parseIntOrDefault(query.Get("limit"), 100)
-    offset = parseIntOrDefault(query.Get("offset"), 0)
-    currency = strings.ToUpper(query.Get("currency"))
-    startDateStr = query.Get("start_date")
-    endDateStr = query.Get("end_date")
-    minAmountStr = query.Get("min_amount")
-    maxAmountStr = query.Get("max_amount")
-    return
-}
-
-// validatePagination checks that the limit and offset parameters are within acceptable ranges
-func validatePagination(limit, offset int) error {
+// ValidatePagination checks that the limit and offset parameters are within acceptable ranges.
+func ValidatePagination(limit, offset int) error {
     if limit < 1 || limit > 1000 {
         return errors.New("limit must be between 1 and 1000")
     }
@@ -152,9 +141,9 @@ func validatePagination(limit, offset int) error {
     return nil
 }
 
-// Helper function to parse an integer query parameter 
-// with a default value if the parameter is missing or invalid
-func parseIntOrDefault(s string, defaultVal int) int {
+// ParseIntOrDefault parses an integer query parameter,
+// returning the default value if the string is empty or invalid.
+func ParseIntOrDefault(s string, defaultVal int) int {
     if s == "" {
         return defaultVal
     }
@@ -165,11 +154,13 @@ func parseIntOrDefault(s string, defaultVal int) int {
     return val
 }
 
-func parseDateOrNil(dateStr string) (*time.Time, error) {
+// ParseDateOrNil parses a YYYY-MM-DD date string into a *time.Time.
+// Returns nil,nil for empty strings (meaning "no filter").
+func ParseDateOrNil(dateStr string) (*time.Time, error) {
     if dateStr == "" {
         return nil, nil // No filter provided
     }
-    
+
     // Parse using ISO 8601 date format (YYYY-MM-DD)
     t, err := time.Parse("2006-01-02", dateStr)
     if err != nil {
@@ -178,22 +169,22 @@ func parseDateOrNil(dateStr string) (*time.Time, error) {
     return &t, nil
 }
 
-// validateDateFilters validates the start_date and end_date 
-// query parameters and returns pointers to time.Time values
-func parseAndValidateDateFilters(startDateStr, endDateStr string) (*time.Time, *time.Time, error) {
+// ParseAndValidateDateFilters parses and validates the start_date and end_date
+// query parameters and returns pointers to time.Time values.
+func ParseAndValidateDateFilters(startDateStr, endDateStr string) (*time.Time, *time.Time, error) {
 	// Using pointers to distinguish between "not provided" (nil) and "provided with zero value" (time.Time{})
     var startDate, endDate *time.Time
     var err error
 
     if startDateStr != "" {
-        startDate, err = parseDateOrNil(startDateStr)
+        startDate, err = ParseDateOrNil(startDateStr)
         if err != nil {
             return nil, nil, errors.New("invalid start_date format, use YYYY-MM-DD")
         }
     }
 
     if endDateStr != "" {
-        endDate, err = parseDateOrNil(endDateStr)
+        endDate, err = ParseDateOrNil(endDateStr)
         if err != nil {
             return nil, nil, errors.New("invalid end_date format, use YYYY-MM-DD")
         }
@@ -206,8 +197,9 @@ func parseAndValidateDateFilters(startDateStr, endDateStr string) (*time.Time, *
     return startDate, endDate, nil
 }
 
-
-func parseAndValidateAmountFilters(minAmountStr, maxAmountStr string) (*int64, *int64, error) {
+// ParseAndValidateAmountFilters parses and validates the min_amount and max_amount
+// query parameters, returning pointers to int64 values.
+func ParseAndValidateAmountFilters(minAmountStr, maxAmountStr string) (*int64, *int64, error) {
 	// Using pointers to distinguish between "not provided" (nil) and "provided with zero value" (0)
 	// int64 is used for amounts to avoid overflow issues with large values
     var minAmount, maxAmount *int64
@@ -235,9 +227,9 @@ func parseAndValidateAmountFilters(minAmountStr, maxAmountStr string) (*int64, *
     return minAmount, maxAmount, nil
 }
 
-
-func applyFilters(transactions []model.Transaction, currency string, startDate, endDate *time.Time, minAmount, maxAmount *int64) []model.Transaction {
-	// Create a new slice to hold the filtered transactions. 
+// ApplyFilters filters a slice of transactions based on optional currency, date, and amount constraints.
+func ApplyFilters(transactions []model.Transaction, currency string, startDate, endDate *time.Time, minAmount, maxAmount *int64) []model.Transaction {
+	// Create a new slice to hold the filtered transactions.
 	// We can preallocate it with the same length as the input slice for efficiency
 	filtered := make([]model.Transaction, 0, len(transactions))
 
@@ -271,7 +263,8 @@ func applyFilters(transactions []model.Transaction, currency string, startDate, 
 	return filtered
 }
 
-func applyPagination(transactions []model.Transaction, limit, offset int) []model.Transaction {
+// ApplyPagination slices a transaction list to the requested page window.
+func ApplyPagination(transactions []model.Transaction, limit, offset int) []model.Transaction {
     start := offset
 	// Handle edge case where offset is greater than the number of transactions
     if start > len(transactions) {
@@ -287,3 +280,15 @@ func applyPagination(transactions []model.Transaction, limit, offset int) []mode
     return transactions[start:end]
 }
 
+// parseQueryParams extracts all list query parameters from the URL values.
+// Kept private as it is an internal detail of ListTransactions.
+func parseQueryParams(query url.Values) (limit, offset int, currency, startDateStr, endDateStr, minAmountStr, maxAmountStr string) {
+    limit = ParseIntOrDefault(query.Get("limit"), 100)
+    offset = ParseIntOrDefault(query.Get("offset"), 0)
+    currency = strings.ToUpper(query.Get("currency"))
+    startDateStr = query.Get("start_date")
+    endDateStr = query.Get("end_date")
+    minAmountStr = query.Get("min_amount")
+    maxAmountStr = query.Get("max_amount")
+    return
+}

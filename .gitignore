@@ -28,3 +28,4 @@ vendor/
 *.swo
 *~
 .DS_Store
+/.claude
