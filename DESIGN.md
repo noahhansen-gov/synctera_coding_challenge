@@ -44,7 +44,7 @@ Moving to a real database:
 
 In a production version I would:
 
-- Track Error rate by status code. A spike in 409s (conflicts) suggests a client retry bug. A spike in 400s suggests a schema change broke a caller. A spike in 500s means something is broken internally.
+- Track error rate by status code. A spike in 409s (conflicts) suggests a client retry bug. A spike in 400s suggests a schema change broke a caller. A spike in 500s means something is broken internally.
 - Create a Transaction count gauge. An increasing counter of stored transactions tells you how fast the store is growing and helps anticipate when you will hit memory limits.
 - Develop Structured logging with a request ID. Every request should log a unique ID, method, path, status code, and duration.
 
@@ -54,4 +54,3 @@ In a production version I would:
 - Add a request body size cap to guard against oversized payloads.
 - Add a PostgresStore implementation behind the Store interface.
 - Add structured logging (e.g., log/slog) with request IDs.
-- Expose a /health endpoint for readiness/liveness probes.
