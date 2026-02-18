@@ -21,6 +21,26 @@ func NewHandler(s store.Store) *Handler {
 	return &Handler{store: s}
 }
 
+func (h *Handler) GetTransaction(w http.ResponseWriter, r *http.Request) {
+    id := r.PathValue("id")
+    if id == "" {
+        http.Error(w, "missing transaction id", http.StatusBadRequest)
+        return
+    }
+
+    txn, err := h.store.Get(id)
+    if errors.Is(err, store.ErrNotFound) {
+        http.Error(w, "transaction not found", http.StatusNotFound)
+        return
+    } else if err != nil {
+        http.Error(w, "internal server error", http.StatusInternalServerError)
+        return
+    }
+
+    w.Header().Set("Content-Type", "application/json")
+    json.NewEncoder(w).Encode(txn)
+}
+
 func (h *Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
     var txn model.Transaction
 
@@ -42,6 +62,7 @@ func (h *Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
     // Handle errors from store
     if errors.Is(err, store.ErrDuplicate) {
         // Idempotent retry - same transaction already exists
+        w.Header().Set("Content-Type", "application/json")
         w.WriteHeader(http.StatusOK)
         json.NewEncoder(w).Encode(txn)
         return
@@ -56,6 +77,7 @@ func (h *Handler) CreateTransaction(w http.ResponseWriter, r *http.Request) {
     }
 
     // 5. Success - new transaction created
+    w.Header().Set("Content-Type", "application/json")
     w.WriteHeader(http.StatusCreated)
     json.NewEncoder(w).Encode(txn)
 }
