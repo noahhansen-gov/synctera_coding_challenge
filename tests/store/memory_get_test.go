@@ -81,3 +81,22 @@ func TestGet_afterMultipleCreates(t *testing.T) {
 		t.Errorf("expected EUR, got %q", got.Currency)
 	}
 }
+
+// Test: TestGet_returnsACopyOfMetadata
+// What: Get returns a deep copy of the transaction — mutating the returned Metadata map does not affect the store
+// Input: store with one transaction (metadata={"k":"v"}); mutate returned map key to "mutated"
+// Output: Get still returns metadata["k"]="v" (store is unaffected)
+func TestGet_returnsACopyOfMetadata(t *testing.T) {
+	s := store.NewMemoryStore()
+	txn := makeTxn("a", 100, "USD", jan(1))
+	txn.Metadata = map[string]string{"k": "v"}
+	_ = s.Create(txn)
+
+	got, _ := s.Get("a")
+	got.Metadata["k"] = "mutated"
+
+	got2, _ := s.Get("a")
+	if got2.Metadata["k"] != "v" {
+		t.Error("Get should return a copy; mutating returned Metadata should not affect the store")
+	}
+}

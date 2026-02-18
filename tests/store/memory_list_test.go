@@ -203,3 +203,22 @@ func TestList_returnsACopy(t *testing.T) {
 		t.Error("List should return a copy; modifying it should not affect the store")
 	}
 }
+
+// Test: TestList_returnsACopyOfMetadata
+// What: List returns deep copies of transactions — mutating a returned Metadata map does not affect the store
+// Input: store with one transaction (metadata={"k":"v"}); mutate returned map key to "mutated"
+// Output: subsequent List still returns metadata["k"]="v" (store is unaffected)
+func TestList_returnsACopyOfMetadata(t *testing.T) {
+	s := store.NewMemoryStore()
+	txn := makeTxn("a", 100, "USD", jan(1))
+	txn.Metadata = map[string]string{"k": "v"}
+	_ = s.Create(txn)
+
+	list, _ := s.List(10, 0)
+	list[0].Metadata["k"] = "mutated"
+
+	got, _ := s.Get("a")
+	if got.Metadata["k"] != "v" {
+		t.Error("List should return deep copies; mutating returned Metadata should not affect the store")
+	}
+}

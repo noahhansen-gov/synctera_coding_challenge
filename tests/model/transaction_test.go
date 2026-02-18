@@ -128,3 +128,15 @@ func TestEqual_bothNilMetadata(t *testing.T) {
 		t.Fatal("transactions with both nil metadata should be equal")
 	}
 }
+
+// Test: TestEqual_differentMetadataKeySameEmptyValue
+// What: Transaction.Equal returns false when keys differ even if both have empty-string values
+// Input: a has Metadata={"a":""}, b has Metadata={"b":""}
+// Output: false (a missing key returns "" in Go, so without comma-ok this incorrectly returns true)
+func TestEqual_differentMetadataKeySameEmptyValue(t *testing.T) {
+	a := model.Transaction{ID: "txn-1", Amount: 100, Currency: "USD", EffectiveAt: t0, Metadata: map[string]string{"a": ""}}
+	b := model.Transaction{ID: "txn-1", Amount: 100, Currency: "USD", EffectiveAt: t0, Metadata: map[string]string{"b": ""}}
+	if a.Equal(b) {
+		t.Fatal("transactions with different metadata keys should not be equal even if values are empty strings")
+	}
+}

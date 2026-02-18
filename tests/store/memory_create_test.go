@@ -180,3 +180,22 @@ func TestCreate_doesNotStoreOnConflict(t *testing.T) {
 		t.Errorf("conflicting write should not modify stored transaction: got amount %d", got.Amount)
 	}
 }
+
+// Test: TestCreate_doesNotShareMetadataReference
+// What: Create clones the transaction before storing — mutating the caller's Metadata map after Create does not affect the stored transaction
+// Input: transaction created with metadata={"k":"v"}; caller mutates map to {"k":"mutated"} after Create
+// Output: Get still returns metadata["k"]="v"
+func TestCreate_doesNotShareMetadataReference(t *testing.T) {
+	s := store.NewMemoryStore()
+	meta := map[string]string{"k": "v"}
+	txn := makeTxn("txn-1", 100, "USD", jan(1))
+	txn.Metadata = meta
+	_ = s.Create(txn)
+
+	meta["k"] = "mutated" // mutate the original map after storing
+
+	got, _ := s.Get("txn-1")
+	if got.Metadata["k"] != "v" {
+		t.Error("Create should clone the transaction; mutating caller's Metadata after Create should not affect the store")
+	}
+}

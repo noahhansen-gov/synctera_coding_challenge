@@ -11,6 +11,20 @@ type Transaction struct {
 	Metadata    map[string]string `json:"metadata,omitempty"`
 }
 
+// Clone returns a deep copy of the transaction.
+// Metadata is a map (reference type), so it must be explicitly copied to
+// prevent callers from mutating the store's internal state.
+func (t Transaction) Clone() Transaction {
+	c := t
+	if t.Metadata != nil {
+		c.Metadata = make(map[string]string, len(t.Metadata))
+		for k, v := range t.Metadata {
+			c.Metadata[k] = v
+		}
+	}
+	return c
+}
+
 // Equal returns true if two transactions have identical field values.
 // Used for idempotency checks.
 func (t Transaction) Equal(other Transaction) bool {
@@ -25,7 +39,8 @@ func (t Transaction) Equal(other Transaction) bool {
 		return false
 	}
 	for k, v := range t.Metadata {
-		if other.Metadata[k] != v {
+		otherV, ok := other.Metadata[k]
+		if !ok || otherV != v {
 			return false
 		}
 	}
